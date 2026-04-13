@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Panel de Seguros Pro</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        :root {
+            --primary: #2c3e50;
+            --accent: #3498db;
+            --warning: #e74c3c;
+            --bg: #f8f9fa;
+        }
+        body { font-family: 'Segoe UI', sans-serif; background-color: var(--bg); color: var(--primary); margin: 0; padding: 20px; }
+        .container { max-width: 1200px; margin: auto; }
+        header { text-align: center; padding: 20px; background: white; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); margin-bottom: 30px; }
+        
+        .grid-charts { display: grid; grid-template-columns: repeat(auto-fit, minmax(450px, 1fr)); gap: 25px; }
+        .card { background: white; padding: 25px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.08); }
+        
+        .search-box { margin: 20px 0; width: 100%; padding: 12px; border: 2px solid #ddd; border-radius: 8px; font-size: 16px; }
+
+        table { width: 100%; border-collapse: collapse; margin-top: 20px; background: white; border-radius: 8px; overflow: hidden; }
+        th, td { padding: 15px; text-align: left; border-bottom: 1px solid #eee; }
+        th { background-color: var(--accent); color: white; text-transform: uppercase; font-size: 13px; }
+        tr:hover { background-color: #f1f7ff; }
+
+        .badge { padding: 5px 10px; border-radius: 20px; font-size: 12px; font-weight: bold; }
+        .alerta-roja { background: #ffd7d7; color: #c0392b; border: 1px solid #c0392b; }
+        
+        #loader { text-align: center; font-weight: bold; color: var(--accent); padding: 40px; }
+        canvas { max-height: 400px; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <header>
+        <h1>📋 Sistema de Gestión de Seguros</h1>
+        <p>Control de Cartera, Gráficas y Alertas en Tiempo Real</p>
+    </header>
+
+    <div id="loader">🔄 Conectando con tu Excel de Google...</div>
+
+    <div id="content" style="display: none;">
+        <div class="grid-charts">
+            <div class="card">
+                <h3>💰 Ventas Mensuales (Prima Total)</h3>
+                <canvas id="ventasChart"></canvas>
+            </div>
+            <div class="card">
+                <h3>🚗 Distribución por Ramo</h3>
+                <canvas id="ramosChart"></canvas>
+            </div>
+        </div>
+
+        <div class="card" style="margin-top: 30px;">
+            <h3>🚨 Próximos Vencimientos y Pagos</h3>
+            <input type="text" id="busqueda" class="search-box" placeholder="Buscar asegurado, póliza o mes...">
+            <div style="overflow-x: auto;">
+                <table id="tablaSeguros">
+                    <thead>
+                        <tr>
+                            <th>Mes</th>
+                            <th>Asegurado</th>
+                            <th>Ramo</th>
+                            <th>Póliza</th>
+                            <th>Próximo Pago / Vigencia</th>
+                            <th>Estatus Alerta</th>
+                        </tr>
+                    </thead>
+                    <tbody></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    // TU URL DE GOOGLE APPS SCRIPT
+    const API_URL = 'https://script.google.com/macros/s/AKfycbzCK8UHaA46BF6pDW3Xvp3HlNE_xcJViYrK-KNPqUZqaujyfvXd0ldbjA4Brr35mt4/exec';
+
+    async function fetchData() {
+        try {
+            const res = await fetch(API_URL);
+            const data = await res.json();
+            
+            document.getElementById('loader').style.display = 'none';
+            document.getElementById('content').style.display = 'block';
+            
+            renderCharts(data);
+            renderTable(data);
+            setupSearch();
+        } catch (e) {
+            document.getElementById('loader').innerHTML = "❌ Error al cargar datos. Revisa los permisos de tu Script.";
+            console.error(e);
+        }
+    }
+
+    function renderCharts(data) {
+        const meses = {};
+        const ramos = {};
+
+        data.forEach(row => {
+            // Procesar Ventas por Mes
+            const mes = row.MES || 'Desconocido';
+            const prima = parseFloat(String(row['PRIMA TOTAL']).replace(/[$,]/g, '')) || 0;
+            meses[mes] = (meses[mes] || 0) + prima;
+
+            // Procesar Ramos
+            const ramo = row.AUTO || 'Otro';
+            ramos[ramo] = (ramos[ramo] || 0) + 1;
+        });
+
+        // Gráfica Barras
+        new Chart(document.getElementById('ventasChart'), {
+            type: 'bar',
+            data: {
+                labels: Object.keys(meses),
+                datasets: [{
+                    label: 'Monto en $',
+                    data: Object.values(meses),
+                    backgroundColor: '#3498db',
+                    borderRadius: 5
+                }]
+            }
+        });
+
+        // Gráfica Pastel
+        new Chart(document.getElementById('ramosChart'), {
+            type: 'doughnut',
+            data: {
+                labels: Object.keys(ramos),
+                datasets: [{
+                    data: Object.values(ramos),
+                    backgroundColor: ['#e74c3c', '#2ecc71', '#f1c40f', '#9b59b6', '#34495e', '#1abc9c']
+                }]
+            }
+        });
+    }
+
+    function renderTable(data) {
+        const tbody = document.querySelector('#tablaSeguros tbody');
+        tbody.innerHTML = '';
+
+        data.forEach(row => {
+            const esAlerta = row.ALERTA_SISTEMA && row.ALERTA_SISTEMA.includes('AVISAR');
+            const rowClass = esAlerta ? 'class="status-alerta"' : '';
+            const badgeClass = esAlerta ? 'badge alerta-roja' : 'badge';
+            
+            const tr = document.createElement('tr');
+            tr.innerHTML = `
+                <td>${row.MES}</td>
+                <td><strong>${row.ASEGURADO}</strong></td>
+                <td>${row.AUTO}</td>
+                <td>${row.POLIZA}</td>
+                <td>${String(row.VIGENCIA).split('T')[0]}</td>
+                <td><span class="${badgeClass}">${row.ALERTA_SISTEMA || 'VIGENTE'}</span></td>
+            `;
+            tbody.appendChild(tr);
+        });
+    }
+
+    function setupSearch() {
+        const input = document.getElementById('busqueda');
+        input.addEventListener('keyup', function() {
+            const filter = input.value.toUpperCase();
+            const rows = document.querySelector('#tablaSeguros tbody').getElementsByTagName('tr');
+            
+            for (let i = 0; i < rows.length; i++) {
+                const text = rows[i].textContent || rows[i].innerText;
+                rows[i].style.display = text.toUpperCase().indexOf(filter) > -1 ? "" : "none";
+            }
+        });
+    }
+
+    fetchData();
+</script>
+
+</body>
+</html>
