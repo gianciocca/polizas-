@@ -11,26 +11,27 @@
         .container { max-width: 1200px; margin: auto; }
         .card { background: white; padding: 20px; border-radius: 12px; box-shadow: 0 4px 10px rgba(0,0,0,0.1); margin-bottom: 20px; }
         .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(400px, 1fr)); gap: 20px; }
-        table { width: 100%; border-collapse: collapse; margin-top: 15px; }
-        th, td { padding: 12px; text-align: left; border-bottom: 1px solid #eee; }
-        th { background: var(--accent); color: white; }
+        table { width: 100%; border-collapse: collapse; margin-top: 15px; font-size: 14px; }
+        th, td { padding: 10px; text-align: left; border-bottom: 1px solid #eee; }
+        th { background: var(--accent); color: white; position: sticky; top: 0; }
         #loader { text-align: center; padding: 50px; font-size: 1.2rem; color: var(--accent); }
+        .alerta { color: #e74c3c; font-weight: bold; }
     </style>
 </head>
 <body>
 <div class="container">
-    <div class="card" style="text-align:center;"><h1>📊 Mi Cartera de Seguros</h1></div>
-    <div id="loader">🚀 Cargando datos...</div>
+    <div class="card" style="text-align:center;"><h1>📊 Mi Cartera de Seguros Actualizada</h1></div>
+    <div id="loader">🚀 Conectando con la base de datos...</div>
     <div id="content" style="display:none;">
         <div class="grid">
-            <div class="card"><h3>Ventas por Mes</h3><canvas id="chartVentas"></canvas></div>
-            <div class="card"><h3>Ramos</h3><canvas id="chartRamos"></canvas></div>
+            <div class="card"><h3>💰 Ventas por Mes (Prima Total)</h3><canvas id="chartVentas"></canvas></div>
+            <div class="card"><h3>📋 Distribución por Ramo</h3><canvas id="chartRamos"></canvas></div>
         </div>
         <div class="card">
-            <h3>Lista de Pólizas</h3>
-            <div style="overflow-x:auto;">
+            <h3>🗂️ Registro Completo de Pólizas</h3>
+            <div style="overflow-x:auto; max-height: 500px;">
                 <table id="tabla">
-                    <thead><tr><th>Mes</th><th>Asegurado</th><th>Póliza</th><th>Vigencia</th><th>Estatus</th></tr></thead>
+                    <thead><tr><th>Mes</th><th>Asegurado</th><th>Ramo</th><th>Póliza</th><th>Vigencia</th><th>Estatus</th></tr></thead>
                     <tbody></tbody>
                 </table>
             </div>
@@ -39,7 +40,6 @@
 </div>
 
 <script>
-    // PEGA AQUÍ TU URL QUE YA FUNCIONA
     const API_URL = 'https://script.google.com/macros/s/AKfycbzCK8UHaA46BF6pDW3Xvp3HlNE_xcJViYrK-KNPqUZqaujyfvXd0ldbjA4Brr35mt4/exec';
 
     async function cargar() {
@@ -54,37 +54,60 @@
             const tbody = document.querySelector('#tabla tbody');
 
             data.forEach(item => {
-                // Usamos llaves en mayúsculas porque así vienen en tu imagen
-                const mes = item.MES || 'S/D';
-                const ramo = item.AUTO || 'OTROS';
-                const prima = parseFloat(String(item['PRIMA TOTAL'] || "0").replace(/[$,]/g, "")) || 0;
+                // Función para buscar datos sin importar mayúsculas/minúsculas o espacios
+                const getVal = (key) => {
+                    const foundKey = Object.keys(item).find(k => k.trim().toUpperCase() === key.toUpperCase());
+                    return foundKey ? item[foundKey] : "";
+                };
 
-                ventasMes[mes] = (ventasMes[mes] || 0) + prima;
-                ramos[ramo] = (ramos[ramo] || 0) + 1;
+                const mes = getVal("MES") || "S/D";
+                const asegurado = getVal("ASEGURADO");
+                const ramo = getVal("AUTO") || "OTROS";
+                const poliza = getVal("POLIZA");
+                const vigencia = String(getVal("VIGENCIA")).split('T')[0];
+                const alerta = getVal("ALERTA_SISTEMA") || "VIGENTE";
+                
+                // Limpiar y sumar Prima Total
+                const primaRaw = String(getVal("PRIMA TOTAL")).replace(/[$,]/g, "");
+                const prima = parseFloat(primaRaw) || 0;
 
-                if(item.ASEGURADO) {
+                // Solo agregar a la tabla si hay un asegurado (para saltar filas vacías de títulos de mes)
+                if (asegurado && asegurado !== "") {
+                    ventasMes[mes] = (ventasMes[mes] || 0) + prima;
+                    ramos[ramo] = (ramos[ramo] || 0) + 1;
+
                     tbody.innerHTML += `<tr>
                         <td>${mes}</td>
-                        <td>${item.ASEGURADO}</td>
-                        <td>${item.POLIZA}</td>
-                        <td>${String(item.VIGENCIA).split('T')[0]}</td>
-                        <td>${item.ALERTA_SISTEMA || 'VIGENTE'}</td>
+                        <td><strong>${asegurado}</strong></td>
+                        <td>${ramo}</td>
+                        <td>${poliza}</td>
+                        <td>${vigencia}</td>
+                        <td class="${alerta !== 'VIGENTE' ? 'alerta' : ''}">${alerta}</td>
                     </tr>`;
                 }
             });
 
+            // Gráfica de Barras
             new Chart(document.getElementById('chartVentas'), {
                 type: 'bar',
-                data: { labels: Object.keys(ventasMes), datasets: [{ label: 'Prima $', data: Object.values(ventasMes), backgroundColor: '#3498db' }] }
+                data: { 
+                    labels: Object.keys(ventasMes), 
+                    datasets: [{ label: 'Prima Total $', data: Object.values(ventasMes), backgroundColor: '#3498db' }] 
+                },
+                options: { responsive: true }
             });
 
+            // Gráfica de Pastel
             new Chart(document.getElementById('chartRamos'), {
                 type: 'pie',
-                data: { labels: Object.keys(ramos), datasets: [{ data: Object.values(ramos), backgroundColor: ['#e74c3c','#2ecc71','#f1c40f','#9b59b6'] }] }
+                data: { 
+                    labels: Object.keys(ramos), 
+                    datasets: [{ data: Object.values(ramos), backgroundColor: ['#e74c3c','#2ecc71','#f1c40f','#9b59b6','#34495e','#1abc9c'] }] 
+                }
             });
 
         } catch (e) {
-            document.getElementById('loader').innerHTML = "❌ Error: " + e;
+            document.getElementById('loader').innerHTML = "❌ Error al procesar datos: " + e;
         }
     }
     cargar();
