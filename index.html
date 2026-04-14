@@ -3,34 +3,65 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Panel de Seguros Pro</title>
+    <title>Panel de Seguros Pro - Dashboard</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
-        :root { --primary: #2c3e50; --accent: #3498db; --bg: #f8f9fa; }
-        body { font-family: 'Segoe UI', sans-serif; background-color: var(--bg); margin: 0; padding: 20px; }
+        :root { --primary: #2c3e50; --accent: #3498db; --bg: #f4f7f6; }
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: var(--bg); margin: 0; padding: 20px; color: #333; }
         .container { max-width: 1200px; margin: auto; }
-        .card { background: white; padding: 20px; border-radius: 12px; box-shadow: 0 4px 10px rgba(0,0,0,0.1); margin-bottom: 20px; }
-        .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(400px, 1fr)); gap: 20px; }
-        table { width: 100%; border-collapse: collapse; margin-top: 15px; font-size: 14px; }
-        th, td { padding: 10px; text-align: left; border-bottom: 1px solid #eee; }
-        th { background: var(--accent); color: white; position: sticky; top: 0; }
-        #loader { text-align: center; padding: 50px; font-size: 1.2rem; color: var(--accent); }
+        .card { background: white; padding: 25px; border-radius: 15px; box-shadow: 0 10px 25px rgba(0,0,0,0.05); margin-bottom: 25px; border: 1px solid #e1e8ed; }
+        .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(450px, 1fr)); gap: 25px; }
+        h1, h3 { margin-top: 0; color: var(--primary); }
+        table { width: 100%; border-collapse: collapse; margin-top: 15px; background: white; }
+        th, td { padding: 12px 15px; text-align: left; border-bottom: 1px solid #edf2f7; }
+        th { background: #f8fafc; color: #64748b; font-weight: 600; text-transform: uppercase; font-size: 12px; letter-spacing: 0.05em; }
+        tr:hover { background-color: #f1f5f9; }
+        .estatus-vigente { color: #2ecc71; font-weight: bold; background: #e8f8f0; padding: 4px 8px; border-radius: 6px; font-size: 12px; }
+        .estatus-alerta { color: #e74c3c; font-weight: bold; background: #fdedec; padding: 4px 8px; border-radius: 6px; font-size: 12px; }
+        #loader { text-align: center; padding: 100px; font-size: 1.5rem; color: var(--accent); font-weight: 300; }
+        .chart-container { position: relative; height: 300px; width: 100%; }
     </style>
 </head>
 <body>
+
 <div class="container">
-    <div class="card" style="text-align:center;"><h1>📊 Mi Cartera de Seguros - Dashboard</h1></div>
-    <div id="loader">🚀 Sincronizando datos...</div>
+    <div class="card" style="text-align:center;">
+        <h1>📊 Panel de Control de Cartera</h1>
+        <p style="color: #666;">Gestión de Pólizas, Ventas y Ramos en Tiempo Real</p>
+    </div>
+
+    <div id="loader">✨ Sincronizando con Google Sheets...</div>
+
     <div id="content" style="display:none;">
         <div class="grid">
-            <div class="card"><h3>💰 Ventas por Mes (Prima Total)</h3><canvas id="chartVentas"></canvas></div>
-            <div class="card"><h3>📋 Distribución por Ramo</h3><canvas id="chartRamos"></canvas></div>
+            <div class="card">
+                <h3>💰 Ventas Mensuales (Prima Total)</h3>
+                <div class="chart-container">
+                    <canvas id="chartVentas"></canvas>
+                </div>
+            </div>
+            <div class="card">
+                <h3>📋 Distribución por Ramo</h3>
+                <div class="chart-container">
+                    <canvas id="chartRamos"></canvas>
+                </div>
+            </div>
         </div>
+
         <div class="card">
-            <h3>🗂️ Registro de Pólizas</h3>
-            <div style="overflow-x:auto; max-height: 500px;">
+            <h3>🗂️ Listado General de Asegurados</h3>
+            <div style="overflow-x:auto; max-height: 600px;">
                 <table id="tabla">
-                    <thead><tr><th>Mes</th><th>Asegurado</th><th>Ramo</th><th>Póliza</th><th>Vigencia</th><th>Estatus</th></tr></thead>
+                    <thead>
+                        <tr>
+                            <th>Mes</th>
+                            <th>Asegurado</th>
+                            <th>Ramo</th>
+                            <th>Póliza</th>
+                            <th>Vigencia</th>
+                            <th>Estatus</th>
+                        </tr>
+                    </thead>
                     <tbody></tbody>
                 </table>
             </div>
@@ -39,90 +70,119 @@
 </div>
 
 <script>
-    // URL DE TU SCRIPT
+    // URL DE TU GOOGLE SCRIPT (Asegúrate que termine en /exec)
     const API_URL = 'https://script.google.com/macros/s/AKfycbzCK8UHaA46BF6pDW3Xvp3HlNE_xcJViYrK-KNPqUZqaujyfvXd0ldbjA4Brr35mt4/exec';
 
-    async function cargar() {
+    async function cargarDatos() {
         try {
-            const res = await fetch(API_URL);
-            const data = await res.json();
+            const respuesta = await fetch(API_URL);
+            const datos = await respuesta.json();
+            
             document.getElementById('loader').style.display = 'none';
             document.getElementById('content').style.display = 'block';
 
-            const ventasMes = {};
-            const ramos = {};
+            const ventasPorMes = {};
+            const ramosContador = {};
             const tbody = document.querySelector('#tabla tbody');
-            const ordenMeses = ["ENERO", "FEBRERO", "MARZO", "ABRIL", "MAYO", "JUNIO", "JULIO", "AGOSTO", "SEPTIEMBRE", "OCTUBRE", "NOVIEMBRE", "DICIEMBRE"];
+            const mesesOrden = ["ENERO", "FEBRERO", "MARZO", "ABRIL", "MAYO", "JUNIO", "JULIO", "AGOSTO", "SEPTIEMBRE", "OCTUBRE", "NOVIEMBRE", "DICIEMBRE"];
 
-            data.forEach(item => {
-                // Función buscadora de columnas inteligente
-                const getVal = (nombres) => {
-                    const key = Object.keys(item).find(k => nombres.includes(k.trim().toUpperCase()));
-                    return key ? item[key] : "";
+            datos.forEach(item => {
+                // Buscador de columnas sin importar mayúsculas
+                const getVal = (nombresPosibles) => {
+                    const llaveEncontrada = Object.keys(item).find(k => nombresPosibles.includes(k.trim().toUpperCase()));
+                    return llaveEncontrada ? item[llaveEncontrada] : "";
                 };
 
                 const asegurado = getVal(["ASEGURADO", "CLIENTE", "NOMBRE"]);
                 
+                // Solo procesamos filas que tengan un nombre de asegurado
                 if (asegurado && asegurado.toString().trim() !== "") {
                     const mes = getVal(["MES"]).toString().trim().toUpperCase() || "S/D";
                     let ramo = getVal(["AUTO", "RAMO", "TIPO"]).toString().trim().toUpperCase() || "OTROS";
-                    if (ramo === "AUTOS") ramo = "AUTO"; // Unificar
+                    
+                    // Unificar nombres similares (Auto y Autos)
+                    if (ramo === "AUTOS") ramo = "AUTO";
 
-                    // Limpieza agresiva de dinero: quita todo lo que no sea número o punto
-                    const primaRaw = getVal(["PRIMA TOTAL", "PRIMA", "MONTO"]).toString().replace(/[^0-9.]/g, "");
-                    const prima = parseFloat(primaRaw) || 0;
+                    // --- LIMPIEZA DE DINERO (CRÍTICO PARA LAS BARRAS) ---
+                    let valorSocio = getVal(["PRIMA TOTAL", "PRIMA", "MONTO"]).toString();
+                    let limpio = valorSocio.replace(/[^0-9.]/g, ""); // Quita $, comas y letras
+                    
+                    // Manejo de puntos decimales extraños
+                    let partes = limpio.split('.');
+                    if (partes.length > 2) limpio = partes.slice(0, -1).join('') + '.' + partes.slice(-1);
+                    
+                    const primaNum = parseFloat(limpio) || 0;
+                    // ----------------------------------------------------
 
-                    // Acumular datos para gráficas
-                    ventasMes[mes] = (ventasMes[mes] || 0) + prima;
-                    ramos[ramo] = (ramos[ramo] || 0) + 1;
+                    // Acumular para gráficas
+                    ventasPorMes[mes] = (ventasPorMes[mes] || 0) + primaNum;
+                    ramosContador[ramo] = (ramosContador[ramo] || 0) + 1;
 
-                    // Llenar la tabla
-                    tbody.innerHTML += `<tr>
-                        <td>${mes}</td>
-                        <td><strong>${asegurado}</strong></td>
-                        <td>${ramo}</td>
-                        <td>${getVal(["POLIZA"])}</td>
-                        <td>${String(getVal(["VIGENCIA"])).split('T')[0]}</td>
-                        <td><span style="color:${getVal(["ALERTA_SISTEMA"]) !== 'VIGENTE' ? 'red' : 'green'}">${getVal(["ALERTA_SISTEMA"]) || 'VIGENTE'}</span></td>
-                    </tr>`;
+                    // Insertar en Tabla
+                    const vigencia = String(getVal(["VIGENCIA", "VENCE"])).split('T')[0];
+                    const estatus = (getVal(["ALERTA_SISTEMA", "ESTATUS"]) || "VIGENTE").toUpperCase();
+                    const claseEstatus = estatus === "VIGENTE" ? "estatus-vigente" : "estatus-alerta";
+
+                    tbody.innerHTML += `
+                        <tr>
+                            <td>${mes}</td>
+                            <td><strong>${asegurado}</strong></td>
+                            <td>${ramo}</td>
+                            <td>${getVal(["POLIZA", "NO. POLIZA"])}</td>
+                            <td>${vigencia}</td>
+                            <td><span class="${claseEstatus}">${estatus}</span></td>
+                        </tr>
+                    `;
                 }
             });
 
-            // Configurar Gráfica de Barras
-            const etiquetasMeses = ordenMeses.filter(m => ventasMes[m] !== undefined);
-            const valoresVentas = etiquetasMeses.map(m => ventasMes[m]);
+            // --- CONFIGURACIÓN GRÁFICA DE VENTAS (BARRAS) ---
+            const etiquetasMeses = mesesOrden.filter(m => ventasPorMes[m] !== undefined);
+            const datosVentas = etiquetasMeses.map(m => ventasPorMes[m]);
 
             new Chart(document.getElementById('chartVentas'), {
                 type: 'bar',
                 data: {
                     labels: etiquetasMeses,
                     datasets: [{
-                        label: 'Prima Total $',
-                        data: valoresVentas,
+                        label: 'Ventas en Prima $',
+                        data: datosVentas,
                         backgroundColor: '#3498db',
-                        borderWidth: 1
+                        borderRadius: 5
                     }]
                 },
-                options: { scales: { y: { beginAtZero: true } } }
-            });
-
-            // Configurar Gráfica de Pastel
-            new Chart(document.getElementById('chartRamos'), {
-                type: 'pie',
-                data: {
-                    labels: Object.keys(ramos),
-                    datasets: [{
-                        data: Object.values(ramos),
-                        backgroundColor: ['#e74c3c','#2ecc71','#f1c40f','#9b59b6','#34495e','#1abc9c','#f39c12']
-                    }]
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: { y: { beginAtZero: true, grid: { display: false } } }
                 }
             });
 
-        } catch (e) {
-            document.getElementById('loader').innerHTML = "❌ Error al cargar datos: " + e;
+            // --- CONFIGURACIÓN GRÁFICA DE RAMOS (DONA) ---
+            new Chart(document.getElementById('chartRamos'), {
+                type: 'doughnut',
+                data: {
+                    labels: Object.keys(ramosContador),
+                    datasets: [{
+                        data: Object.values(ramosContador),
+                        backgroundColor: ['#e74c3c','#2ecc71','#f1c40f','#9b59b6','#34495e','#1abc9c','#f39c12']
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: { legend: { position: 'bottom' } }
+                }
+            });
+
+        } catch (error) {
+            document.getElementById('loader').innerHTML = "❌ Error crítico: " + error;
+            console.error(error);
         }
     }
-    cargar();
+
+    cargarDatos();
 </script>
+
 </body>
 </html>
