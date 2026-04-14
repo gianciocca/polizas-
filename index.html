@@ -84,45 +84,50 @@
             const mesesOrden = ["ENERO", "FEBRERO", "MARZO", "ABRIL", "MAYO", "JUNIO", "JULIO", "AGOSTO", "SEPTIEMBRE", "OCTUBRE", "NOVIEMBRE", "DICIEMBRE"];
 
             datos.forEach(item => {
-                const getVal = (nombres) => {
-                    const key = Object.keys(item).find(k => nombres.includes(k.trim().toUpperCase()));
-                    return key ? item[key] : "";
+                // Función de búsqueda exacta para evitar que "Prima Neta" se meta en "Prima Total"
+                const getValExacto = (nombreExacto) => {
+                    const keys = Object.keys(item);
+                    // Buscamos la llave que coincida exactamente ignorando espacios
+                    const foundKey = keys.find(k => k.trim().toUpperCase() === nombreExacto.toUpperCase());
+                    return foundKey ? item[foundKey] : "";
                 };
 
-                const asegurado = getVal(["ASEGURADO", "CLIENTE"]);
+                const asegurado = getValExacto("ASEGURADO") || getValExacto("CLIENTE");
                 
                 if (asegurado && asegurado.toString().trim() !== "") {
-                    const mes = getVal(["MES"]).toString().trim().toUpperCase() || "S/D";
-                    const ramo = getVal(["AUTO", "RAMO"]).toString().trim().toUpperCase() || "OTROS";
+                    const mes = getValExacto("MES").toString().trim().toUpperCase() || "S/D";
+                    const ramo = getValExacto("AUTO").toString().trim().toUpperCase() || "OTROS";
 
-                    // Limpieza de Dinero para PRIMA TOTAL:
-                    let primaRaw = getVal(["PRIMA TOTAL:", "PRIMA TOTAL"]).toString().replace(/[^0-9.]/g, "");
+                    // --- LIMPIEZA DE PRIMA TOTAL: (Buscamos el nombre exacto con los dos puntos) ---
+                    let primaRaw = getValExacto("PRIMA TOTAL:").toString().replace(/[^0-9.]/g, "");
                     const primaNum = parseFloat(primaRaw) || 0;
 
-                    // Limpieza de Dinero para COMISIONES:
-                    let comisionRaw = getVal(["COMISIONES", "COMISION", "COMISIÓN"]).toString().replace(/[^0-9.]/g, "");
+                    // --- LIMPIEZA DE COMISIONES: ---
+                    let comisionRaw = getValExacto("COMISIONES").toString().replace(/[^0-9.]/g, "");
                     const comisionNum = parseFloat(comisionRaw) || 0;
 
-                    // Acumular
-                    primasMes[mes] = (primasMes[mes] || 0) + primaNum;
-                    comisionesMes[mes] = (comisionesMes[mes] || 0) + comisionNum;
-                    ramosContador[ramo] = (ramosContador[ramo] || 0) + 1;
+                    // Acumular solo si el mes existe en nuestra lista
+                    if (mesesOrden.includes(mes)) {
+                        primasMes[mes] = (primasMes[mes] || 0) + primaNum;
+                        comisionesMes[mes] = (comisionesMes[mes] || 0) + comisionNum;
+                        ramosContador[ramo] = (ramosContador[ramo] || 0) + 1;
+                    }
 
                     tbody.innerHTML += `
                         <tr>
                             <td>${mes}</td>
                             <td><strong>${asegurado}</strong></td>
-                            <td>${getVal(["POLIZA"])}</td>
+                            <td>${getValExacto("POLIZA")}</td>
                             <td>$${primaNum.toLocaleString()}</td>
                             <td style="color:green;">$${comisionNum.toLocaleString()}</td>
-                            <td>${getVal(["ALERTA_SISTEMA"]) || 'VIGENTE'}</td>
+                            <td>${getValExacto("ALERTA_SISTEMA") || 'VIGENTE'}</td>
                         </tr>`;
                 }
             });
 
-            const etiquetas = mesesOrden.filter(m => primasMes[m] !== undefined || comisionesMes[m] !== undefined);
+            const etiquetas = mesesOrden.filter(m => primasMes[m] !== undefined);
 
-            // Gráfica 1: Primas
+            // Gráfica de Primas
             new Chart(document.getElementById('chartPrimas'), {
                 type: 'bar',
                 data: {
@@ -132,7 +137,7 @@
                 options: { responsive: true, maintainAspectRatio: false }
             });
 
-            // Gráfica 2: Comisiones
+            // Gráfica de Comisiones
             new Chart(document.getElementById('chartComisiones'), {
                 type: 'bar',
                 data: {
@@ -142,7 +147,7 @@
                 options: { responsive: true, maintainAspectRatio: false }
             });
 
-            // Gráfica 3: Ramos
+            // Gráfica de Ramos
             new Chart(document.getElementById('chartRamos'), {
                 type: 'doughnut',
                 data: {
